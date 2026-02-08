@@ -4,6 +4,8 @@ import (
 	"time"
 
 	"github.com/apk471/go-taskmanager/internal/model"
+	"github.com/apk471/go-taskmanager/internal/model/category"
+	"github.com/apk471/go-taskmanager/internal/model/comment"
 	"github.com/google/uuid"
 )
 
@@ -46,3 +48,34 @@ type Metadata struct {
 	Difficulty *int     `json:"difficulty"`
 }
 
+type PopulatedTodo struct {
+	Todo
+	Category    *category.Category `json:"category" db:"category"`
+	Children    []Todo             `json:"children" db:"children"`
+	Comments    []comment.Comment  `json:"comments" db:"comments"`
+	Attachments []TodoAttachment   `json:"attachments" db:"attachments"`
+}
+type TodoStats struct {
+	Total     int `json:"total"`
+	Draft     int `json:"draft"`
+	Active    int `json:"active"`
+	Completed int `json:"completed"`
+	Archived  int `json:"archived"`
+	Overdue   int `json:"overdue"`
+}
+
+type UserWeeklyStats struct {
+	UserID         string `json:"userId" db:"user_id"`
+	CreatedCount   int    `json:"createdCount" db:"created_count"`
+	CompletedCount int    `json:"completedCount" db:"completed_count"`
+	ActiveCount    int    `json:"activeCount" db:"active_count"`
+	OverdueCount   int    `json:"overdueCount" db:"overdue_count"`
+}
+
+func (t *Todo) IsOverdue() bool {
+	return t.DueDate != nil && t.DueDate.Before(time.Now()) && t.Status != StatusCompleted
+}
+
+func (t *Todo) CanHaveChildren() bool {
+	return t.ParentTodoID == nil
+}
