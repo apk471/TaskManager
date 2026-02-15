@@ -5,4 +5,7 @@ const c = initContract();
 
 export const apiContract = c.router({
   Health: healthContract,
+  Todo: todoContract,
+  Comment: commentContract,
+  Category: categoryContract,
 });
