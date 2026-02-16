@@ -1,75 +1,144 @@
 # TaskManager
 
-A production-ready task management application with a Go backend API, PostgreSQL, Redis, background jobs (Asynq), cron jobs, observability (New Relic), Clerk authentication, and shared TypeScript packages for API contracts and Zod schemas.
+A production-ready, full-stack task management application built with Go, PostgreSQL, Redis, and TypeScript. This monorepo implements a REST API for managing todos, categories, and comments with advanced features like hierarchical tasks, background job processing, cron jobs, observability, and Clerk-based authentication.
 
 ---
 
 ## Table of Contents
 
-- [Overview](#overview)
+- [Project Overview](#project-overview)
+- [Architecture](#architecture)
 - [Features](#features)
 - [Tech Stack](#tech-stack)
 - [Project Structure](#project-structure)
-- [Backend](#backend)
-  - [Entry Point & Startup](#entry-point--startup)
-  - [Configuration](#configuration)
-  - [Server](#server)
+- [Backend (Go)](#backend-go)
+  - [Entry Point](#entry-point)
+  - [Configuration Management](#configuration-management)
   - [Database](#database)
-  - [Router & Middleware](#router--middleware)
+  - [Server Architecture](#server-architecture)
+  - [Router and Middleware](#router-and-middleware)
   - [Handlers](#handlers)
   - [Domain Models](#domain-models)
-  - [Services & Repositories](#services--repositories)
-  - [Errors](#errors)
-  - [Logging & Observability](#logging--observability)
-  - [Background Jobs](#background-jobs)
+  - [Services and Repositories](#services-and-repositories)
+  - [Error Handling](#error-handling)
+  - [Logging and Observability](#logging-and-observability)
+  - [Background Jobs (Asynq)](#background-jobs-asynq)
   - [Cron Jobs](#cron-jobs)
-  - [Email](#email)
+  - [Email System](#email-system)
   - [Validation](#validation)
-- [Packages (TypeScript)](#packages-typescript)
+- [TypeScript Packages](#typescript-packages)
+  - [Zod Schemas](#zod-schemas)
+  - [OpenAPI Contracts](#openapi-contracts)
+  - [Email Templates](#email-templates)
 - [API Endpoints](#api-endpoints)
-- [Tooling](#tooling)
+  - [System Routes](#system-routes)
+  - [Todo API](#todo-api)
+  - [Category API](#category-api)
+  - [Comment API](#comment-api)
 - [Environment Variables](#environment-variables)
-- [Running the Project](#running-the-project)
-- [Extending the TaskManager](#extending-the-taskmanager)
+- [Getting Started](#getting-started)
+  - [Prerequisites](#prerequisites)
+  - [Installation](#installation)
+  - [Running the Application](#running-the-application)
+- [Development Tools](#development-tools)
+- [Extending the Application](#extending-the-application)
+- [License](#license)
 
 ---
 
-## Overview
+## Project Overview
 
-TaskManager is a full-featured task management system designed for production use. It provides a REST API for managing todos, categories, and comments with features like hierarchical todos, due date reminders, overdue notifications, weekly productivity reports, and automatic archiving.
+TaskManager is a comprehensive task management system designed for production environments. It provides a robust REST API for creating, organizing, and managing tasks with support for:
+
+- **Hierarchical Todos**: Parent-child task relationships for subtasks
+- **Categories**: Color-coded task organization
+- **Comments**: Collaboration through task comments
+- **Attachments**: File attachments on tasks (model support)
+- **Advanced Filtering**: Complex query support with sorting, filtering, and search
+- **Background Processing**: Async email processing via Asynq
+- **Scheduled Jobs**: Cron-based reminders, notifications, and reports
+- **Authentication**: Clerk-based JWT authentication
+- **Observability**: Full New Relic APM integration
+
+---
+
+## Architecture
+
+The application follows a clean architecture pattern with clear separation of concerns:
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                        HTTP Layer                                │
+│  (Echo Router → Middleware → Handlers → Response)              │
+└─────────────────────────────────────────────────────────────────┘
+                              ↓
+┌─────────────────────────────────────────────────────────────────┐
+│                      Service Layer                               │
+│  (Business Logic: Auth, Todo, Category, Comment, Job Services)  │
+└─────────────────────────────────────────────────────────────────┘
+                              ↓
+┌─────────────────────────────────────────────────────────────────┐
+│                    Repository Layer                              │
+│  (Database Operations: CRUD, Queries, Pagination)               │
+└─────────────────────────────────────────────────────────────────┘
+                              ↓
+┌─────────────────────────────────────────────────────────────────┐
+│                      Data Layer                                  │
+│  PostgreSQL (pgx v5) + Redis (go-redis/Asynq)                  │
+└─────────────────────────────────────────────────────────────────┘
+```
 
 ---
 
 ## Features
 
-- **Todo Management**: Create, update, delete, and organize todos with priorities, statuses, due dates, and metadata
-- **Hierarchical Todos**: Support for parent-child todo relationships (subtasks)
-- **Categories**: Organize todos into color-coded categories
-- **Comments**: Add comments to todos for collaboration
-- **Attachments**: Upload and manage file attachments on todos
-- **Pagination & Filtering**: Advanced query support with sorting, filtering, and search
+### Core Features
+- **Todo Management**: Full CRUD operations for tasks
+- **Hierarchical Tasks**: Support for parent-child relationships (subtasks)
+- **Task Prioritization**: Low, Medium, High priority levels
+- **Status Management**: Draft, Active, Completed, Archived states
+- **Due Dates**: Task due dates with overdue tracking
+- **Categories**: Organize tasks into color-coded categories
+- **Comments**: Add comments to tasks for collaboration
+- **Attachments**: File attachment support (model defined)
+
+### Advanced Features
+- **Pagination & Filtering**: Advanced query support with sorting, filtering, and full-text search
 - **Background Jobs**: Async email processing via Asynq (Redis-backed)
 - **Cron Jobs**: Scheduled tasks for reminders, notifications, reports, and auto-archiving
 - **Authentication**: Clerk-based JWT authentication with user roles and permissions
 - **Observability**: Full New Relic APM integration with distributed tracing and log forwarding
 - **API Documentation**: OpenAPI 3.0 spec with Scalar UI
 
+### Task Statistics
+- Total, Draft, Active, Completed, Archived counts
+- Overdue task tracking
+- Weekly productivity reports
+
 ---
 
 ## Tech Stack
 
-| Component | Technology |
-|-----------|------------|
-| **API Framework** | [Echo v4](https://echo.labstack.com/) |
-| **Database** | PostgreSQL via [pgx v5](https://github.com/jackc/pgx), [tern](https://github.com/jackc/tern) migrations |
-| **Cache/Queue** | Redis ([go-redis](https://github.com/redis/go-redis)), [Asynq](https://github.com/hibiken/asynq) for background jobs |
-| **Authentication** | [Clerk](https://clerk.com/) via `clerk-sdk-go` |
-| **Configuration** | [Koanf](https://github.com/knadh/koanf) with env vars, [go-playground/validator](https://github.com/go-playground/validator) |
-| **Logging** | [zerolog](https://github.com/rs/zerolog) with New Relic log forwarding |
-| **Observability** | New Relic (APM, distributed tracing, nrpgx5, nrecho, nrredis) |
-| **API Docs** | OpenAPI 3 via [ts-rest](https://ts-rest.com/), served with Scalar |
-| **CLI** | [Cobra](https://github.com/spf13/cobra) for cron job runner |
-| **Monorepo** | [Turborepo](https://turbo.build/), Bun package manager |
+| Component | Technology | Version |
+|-----------|------------|---------|
+| **API Framework** | Echo | v4 |
+| **Database** | PostgreSQL | Latest |
+| **Database Driver** | pgx | v5 |
+| **Migrations** | tern | v2 |
+| **Cache/Queue** | Redis | Latest |
+| **Background Jobs** | Asynq | v0.25+ |
+| **Redis Client** | go-redis | v9 |
+| **Authentication** | Clerk SDK | v2 |
+| **Configuration** | Koanf | v2 |
+| **Validation** | go-playground/validator | v10 |
+| **Logging** | zerolog | v1.34+ |
+| **Observability** | New Relic Go Agent | v3.40+ |
+| **API Docs** | ts-rest + Scalar | Latest |
+| **CLI** | Cobra | Latest |
+| **Monorepo** | Turborepo | v2.5+ |
+| **Package Manager** | Bun | 1.2+ |
+| **Language (Backend)** | Go | 1.25+ |
+| **Language (Frontend)** | TypeScript | 5.8+ |
 
 ---
 
@@ -77,286 +146,482 @@ TaskManager is a full-featured task management system designed for production us
 
 ```
 TaskManagement/
-├── backend/                    # Go API server
-│   ├── cmd/go-taskmanager/     # main entry
+├── backend/                          # Go API server
+│   ├── cmd/
+│   │   ├── taskmanager/              # Main application entry
+│   │   └── cron/                     # Cron job runner CLI
 │   ├── internal/
-│   │   ├── config/             # config structs, load, observability
-│   │   ├── database/           # pgx pool, migrations (embed)
-│   │   ├── errs/               # HTTP error types and constructors
-│   │   ├── handler/            # health, openapi, base (typed Handle/HandleNoContent/HandleFile)
+│   │   ├── config/                   # Configuration structs and loading
+│   │   ├── database/                 # Database connection, migrations
+│   │   ├── errs/                     # HTTP error types
+│   │   ├── handler/                  # HTTP request handlers
+│   │   │   ├── base.go               # Base handler with typed responses
+│   │   │   ├── health.go             # Health check endpoint
+│   │   │   ├── openapi.go            # OpenAPI UI handler
+│   │   │   ├── todo.go               # Todo CRUD handlers
+│   │   │   ├── category.go           # Category CRUD handlers
+│   │   │   └── comment.go            # Comment CRUD handlers
 │   │   ├── lib/
-│   │   │   ├── email/          # Resend client, templates, welcome email
-│   │   │   ├── jobs/           # Asynq job service, welcome email task
-│   │   │   └── utils/          # small helpers (e.g. PrintJSON)
-│   │   ├── logger/             # zerolog + New Relic LoggerService, pgx logger
-│   │   ├── middleware/         # CORS, secure, request ID, tracing, context, auth, rate limit, recover, global error
-│   │   ├── repository/         # repository layer (currently empty struct)
-│   │   ├── router/             # Echo router, system routes registration
-│   │   ├── server/             # Server struct (config, DB, Redis, Job, HTTP server)
-│   │   ├── service/            # Auth (Clerk), Job service ref
-│   │   ├── sqlerr/             # PG error → HTTP error mapping
-│   │   └── validation/         # BindAndValidate, Validatable, tag→message mapping
-│   ├── static/                 # openapi.html, openapi.json (from packages/openapi gen)
-│   ├── templates/emails/       # HTML email templates (e.g. welcome.html)
-│   ├── Taskfile.yml            # run, migrations:new, migrations:up, tidy
-│   ├── .golangci.yml           # linter config
+│   │   │   ├── email/                # Resend email client and templates
+│   │   │   ├── jobs/                # Asynq job service
+│   │   │   └── utils/                # Utility helpers
+│   │   ├── logger/                   # zerolog + New Relic integration
+│   │   ├── middleware/               # HTTP middleware stack
+│   │   │   ├── auth.go               # Clerk authentication
+│   │   │   ├── context.go            # Context helpers
+│   │   │   ├── global.go             # Global error handler
+│   │   │   ├── rate_limit.go         # Rate limiting
+│   │   │   ├── request_id.go         # Request ID generation
+│   │   │   ├── secure.go             # Security headers
+│   │   │   └── tracing.go            # Distributed tracing
+│   │   ├── model/                    # Domain models
+│   │   │   ├── base.go               # Base model with ID, timestamps
+│   │   │   ├── todo/                 # Todo model and related types
+│   │   │   ├── category/             # Category model
+│   │   │   └── comment/              # Comment model
+│   │   ├── repository/               # Database repositories
+│   │   │   ├── todo.go
+│   │   │   ├── category.go
+│   │   │   └── comment.go
+│   │   ├── router/                   # HTTP router configuration
+│   │   │   ├── router.go             # Main router setup
+│   │   │   ├── system.go             # System routes (/status, /docs)
+│   │   │   └── v1/                   # API v1 routes
+│   │   ├── server/                   # Server initialization
+│   │   ├── service/                  # Business logic services
+│   │   │   ├── auth.go               # Clerk authentication service
+│   │   │   ├── todo.go               # Todo business logic
+│   │   │   ├── category.go           # Category business logic
+│   │   │   ├── comment.go            # Comment business logic
+│   │   │   └── services.go           # Service container
+│   │   ├── sqlerr/                   # PostgreSQL error handling
+│   │   ├── validation/               # Request validation
+│   │   └── cron/                     # Cron job definitions
+│   ├── static/                       # Static files (OpenAPI)
+│   ├── templates/
+│   │   └── emails/                   # HTML email templates
+│   ├── Taskfile.yml                  # Task automation
+│   ├── .golangci.yml                # Linter configuration
 │   ├── go.mod
 │   └── go.sum
-├── packages/
-│   ├── openapi/                # ts-rest contracts, OpenAPI 3 generation, writes openapi.json
-│   ├── zod/                    # shared Zod schemas (e.g. health response)
-│   └── emails/                 # (optional) React email templates
-├── package.json                # workspace root, turbo scripts
-├── turbo.json
-└── README.md
+├── packages/                         # TypeScript packages
+│   ├── zod/                         # Shared Zod schemas
+│   ├── openapi/                     # ts-rest contracts, OpenAPI generation
+│   └── emails/                      # React email templates
+├── package.json                      # Workspace root
+├── turbo.json                       # Turborepo configuration
+└── README.md                        # This file
 ```
 
 ---
 
-## Backend
+## Backend (Go)
 
-### Entry Point & Startup
+### Entry Point
 
-- **`cmd/go-taskmanager/main.go`**
-  - Loads config via `config.LoadConfig()` (env-only, `TASKMANAGER_` prefix).
-  - Creates `LoggerService` (New Relic optional) and zerolog logger.
-  - Runs DB migrations when `env != "local"` via `database.Migrate(...)`.
-  - Builds `server.Server` (DB, Redis, Asynq job service), repositories, services, handlers, router.
-  - Sets up HTTP server on `server.Port`, starts it and graceful shutdown on interrupt (30s timeout).
-  - Shuts down HTTP server, DB pool, and job server.
+The main application entry point is located at `backend/cmd/taskmanager/main.go`. It handles:
 
-### Configuration
+1. **Configuration Loading**: Loads configuration from environment variables with `TASKMANAGER_` prefix
+2. **Logger Initialization**: Creates logger with optional New Relic integration
+3. **Database Migration**: Runs migrations in non-local environments
+4. **Server Initialization**: Creates and configures the HTTP server
+5. **Dependency Injection**: Builds repositories, services, and handlers
+6. **Router Setup**: Configures routes and middleware
+7. **Graceful Shutdown**: Handles interrupt signals for clean shutdown
 
-- **`internal/config/config.go`**
+```go
+// Key startup sequence
+cfg := config.LoadConfig()
+loggerService := logger.NewLoggerService(cfg.Observability)
+srv, err := server.New(cfg, &log, loggerService)
+repos := repository.NewRepositories(srv)
+services, _ := service.NewServices(srv, repos)
+handlers := handler.NewHandlers(srv, services)
+r := router.NewRouter(srv, handlers, services)
+srv.SetupHTTPServer(r)
+srv.Start()
+```
 
-  - **Config** struct: Primary (env), Server (port, timeouts, CORS origins), Database (host, port, user, password, name, ssl_mode, pool settings), Auth (secret for Clerk), Redis (address), Integration (e.g. Resend API key), Observability (optional).
-  - Load: Koanf with `env.Provider("TASKMANAGER_", ".", lowerAndTrimPrefix)` so env vars like `TASKMANAGER_SERVER_PORT` map to `server.port`.
-  - Validation with `go-playground/validator`; on failure the process exits.
-  - Observability defaults: `DefaultObservabilityConfig()` and override with `observability.service_name`, `observability.environment` from primary env.
+### Configuration Management
 
-- **`internal/config/observability.go`**
-  - **ObservabilityConfig:** service_name, environment, logging (level, format, slow_query_threshold), new_relic (license_key, app_log_forwarding_enabled, distributed_tracing_enabled, debug_logging), health_checks (enabled, interval, timeout, checks list).
-  - `Validate()`: service_name required, log level in [debug, info, warn, error], slow_query_threshold >= 0.
-  - `GetLogLevel()`: uses environment default (e.g. debug for development) when level empty.
-  - `IsProduction()`: true when environment == "production".
+Configuration is managed through environment variables using the Koanf library. All configuration keys use the `TASKMANAGER_` prefix.
 
-### Server
+**Configuration Structure** (`internal/config/config.go`):
 
-- **`internal/server/server.go`**
-  - **Server** holds: Config, Logger, LoggerService, DB (*database.Database), Redis (go-redis Client), Job (*jobs.JobService), and the HTTP server.
-  - **New:** Creates DB (with optional New Relic nrpgx5 tracer, local pgx tracelog in local env), Redis client (with optional nrredis hook), Job service (Asynq client + server), starts the job server (registers task handlers).
-  - **SetupHTTPServer(handler):** Sets `http.Server` (Addr from config, read/write/idle timeouts).
-  - **Start:** Calls `ListenAndServe()`.
-  - **Shutdown:** Shuts down HTTP server, closes DB pool, stops job server.
+```go
+type Config struct {
+    Primary       PrimaryConfig
+    Server        ServerConfig
+    Database      DatabaseConfig
+    Auth          AuthConfig
+    Redis         RedisConfig
+    Integration   IntegrationConfig
+    Observability ObservabilityConfig
+}
+
+type ServerConfig struct {
+    Port              int
+    ReadTimeout       int
+    WriteTimeout      int
+    IdleTimeout       int
+    CORSAllowedOrigins []string
+}
+
+type DatabaseConfig struct {
+    Host            string
+    Port            int
+    User            string
+    Password        string
+    Name            string
+    SSLMode         string
+    MaxOpenConns    int
+    MaxIdleConns    int
+    ConnMaxLifetime int
+    ConnMaxIdleTime int
+}
+```
+
+**Observability Configuration** (`internal/config/observability.go`):
+
+The application supports comprehensive observability with New Relic:
+- APM (Application Performance Monitoring)
+- Distributed tracing
+- Custom events (health checks, rate limit hits)
+- Log forwarding
+- Database query tracing
 
 ### Database
 
-- **`internal/database/database.go`**
+**Database Connection** (`internal/database/database.go`):
 
-  - **Database** wraps `*pgxpool.Pool` and a logger.
-  - **New:** Builds DSN (password URL-encoded), parses pool config; if LoggerService has New Relic app, sets `nrpgx5.NewTracer()`; in local env adds pgx-zerolog tracelog (or multi-tracer with both). Pool created with `pgxpool.NewWithConfig`, then ping with 10s timeout.
-  - **Close:** Logs and closes pool.
+- Uses pgx v5 for PostgreSQL connection pooling
+- Supports New Relic database tracing (nrpgx5)
+- Local development: pgx-zerolog for query logging
+- Connection pool configuration with health checks
 
-- **`internal/database/migrator.go`**
+**Migrations** (`internal/database/migrator.go`):
 
-  - Uses embedded `migrations/*.sql` and [tern](https://github.com/jackc/tern) with table `schema_version`.
-  - **Migrate:** Connects with same DSN, creates tern migrator, loads migrations from embed, runs migrate, logs version.
+- Uses tern for migrations
+- Embedded migration files in `internal/database/migrations/`
+- Auto-runs migrations on startup (non-local environments)
+- Manual migration commands via Taskfile
 
-- **`internal/database/migrations/001_setup.sql`**
-  - Placeholder migration (empty up/down). New migrations: `task migrations:new name=something`.
+```bash
+# Create new migration
+task migrations:new name=add_users_table
 
-### Router & Middleware
+# Run migrations
+task migrations:up
+```
 
-- **`internal/router/router.go`**
+### Server Architecture
 
-  - **NewRouter:** Creates Echo instance, sets **GlobalErrorHandler** from middlewares, then applies in order:
-    - Rate limiter (20 req/s, memory store), DenyHandler returns 429 and records rate limit hit in New Relic.
-    - CORS (origins from config), Secure(), RequestID (X-Request-ID, uuid if missing), NewRelic (nrecho), EnhanceTracing (request id, user id, status code, NoticeError), ContextEnhancer (request-scoped logger with request_id, method, path, ip, trace context, user_id, user_role), RequestLogger, Recover.
-  - Registers system routes via `registerSystemRoutes`; `/api/v1` group exists for future versioned routes.
+**Server Struct** (`internal/server/server.go`):
 
-- **`internal/router/system.go`**
+The Server encapsulates all application dependencies:
 
-  - **GET /status** → HealthHandler.CheckHealth
-  - **/static** → static files (e.g. openapi.json)
-  - **GET /docs** → OpenAPIHandler.ServeOpenAPIUI (serves static/openapi.html, which loads /static/openapi.json and Scalar)
+```go
+type Server struct {
+    Config        *config.Config
+    Logger        *zerolog.Logger
+    LoggerService *logger.LoggerService
+    DB            *database.Database
+    Redis         *redis.Client
+    Job           *jobs.JobService
+    HTTPServer    *http.Server
+}
+```
 
-- **Middleware details**
-  - **global (internal/middleware/global.go):** CORS, Secure, RequestLogger (status, latency, URI, etc., uses context logger and request_id/user_id), Recover, GlobalErrorHandler (sqlerr handling, then HTTP/echo error → JSON response, logging).
-  - **auth (auth.go):** Clerk `WithHeaderAuthorization`; on success sets `user_id`, `user_role`, `permissions` in context; on failure returns 401 JSON.
-  - **context (context.go):** Puts request-scoped logger (with request_id, method, path, ip, trace id/span id if New Relic, user_id/user_role) in context; `GetLogger(c)`, `GetUserID(c)`.
-  - **request_id (request_id.go):** Reads or generates X-Request-ID, sets in context and response header.
-  - **tracing (tracing.go):** Wraps nrecho middleware; EnhanceTracing adds http.real_ip, http.user_agent, request.id, user.id, http.status_code, and NoticeError on handler error.
-  - **rate_limit (rate_limit.go):** RecordRateLimitHit(endpoint) for New Relic custom event when rate limit is hit.
+**Server Initialization**:
+- Creates PostgreSQL connection pool
+- Initializes Redis client with optional New Relic hooks
+- Sets up Asynq job server with priority queues
+- Configures HTTP server with timeouts
+
+### Router and Middleware
+
+**Router** (`internal/router/router.go`):
+
+The router sets up middleware in the following order:
+
+1. **Global Error Handler**: Catches and formats all errors
+2. **Rate Limiter**: 20 req/s with memory store
+3. **CORS**: Configured from environment
+4. **Secure Headers**: Security headers (HSTS, X-Frame-Options, etc.)
+5. **Request ID**: Generates/reads X-Request-ID
+6. **New Relic**: APM middleware
+7. **Tracing**: Adds trace context to requests
+8. **Context Enhancer**: Adds request-scoped logger
+9. **Request Logger**: Logs all requests
+10. **Recover**: Panics recovery
+
+**System Routes** (`internal/router/system.go`):
+- `GET /status` - Health check
+- `GET /docs` - OpenAPI documentation (Scalar UI)
+- `GET /static/*` - Static files
+
+**API Routes** (`internal/router/v1/`):
+- `/api/v1/todos` - Todo CRUD
+- `/api/v1/categories` - Category CRUD
+- `/api/v1/todos/:todoId/comments` - Comment endpoints
 
 ### Handlers
 
-- **`internal/handler/handlers.go`**
+**Base Handler** (`internal/handler/base.go`):
 
-  - **Handlers** contains Health and OpenAPI. **NewHandlers** builds them from server and services.
+Provides typed handler helpers:
 
-- **`internal/handler/base.go`**
+```go
+type Handler struct {
+    Server   *server.Server
+    Services *service.Services
+}
 
-  - **Handler** is a base with server reference.
-  - **HandlerFunc[Req, Res], HandlerFuncNoContent[Req]** for typed handlers.
-  - **ResponseHandler** interface: Handle(c, result), GetOperation(), AddAttributes(txn, result). Implementations: **JSONResponseHandler**, **NoContentResponseHandler**, **FileResponseHandler** (filename, content-type, blob).
-  - **handleRequest:** Binds and validates payload with `validation.BindAndValidate`, runs handler, records validation/handler duration and status on New Relic transaction, uses context logger; on error uses `nrpkgerrors.Wrap` and returns err; on success calls responseHandler.Handle(c, result).
-  - **Handle**, **HandleNoContent**, **HandleFile** wrap handler funcs with handleRequest and the appropriate response handler.
+// HandlerFunc - Generic handler with request/response types
+func (h *Handler) Handle[Req any, Res any](
+    handler func(ctx echo.Context, req Req) (Res, error)
+) echo.HandlerFunc
 
-- **`internal/handler/health.go`**
+// HandleNoContent - For responses without body
+func (h *Handler) HandleNoContent[Req any](
+    handler func(ctx echo.Context, req Req) error
+) echo.HandlerFunc
 
-  - **CheckHealth:** Returns JSON with status (healthy/unhealthy), timestamp, environment, and **checks** (database ping, redis ping when Redis not nil). On DB/Redis failure sets check to unhealthy and records **HealthCheckError** custom event in New Relic. Returns 503 when unhealthy.
+// HandleFile - For file downloads
+func (h *Handler) HandleFile(
+    handler func(ctx echo.Context) (File, error)
+) echo.HandlerFunc
+```
 
-- **`internal/handler/openapi.go`**
-  - **ServeOpenAPIUI:** Serves `static/openapi.html` as HTML (Cache-Control: no-cache). The HTML page loads Scalar with `/static/openapi.json`.
+**Response Handlers**:
+- `JSONResponseHandler` - JSON responses
+- `NoContentResponseHandler` - 204 No Content
+- `FileResponseHandler` - File downloads
 
-- **`internal/handler/todo.go`**
-  - **TodoHandler:** CRUD operations for todos (CreateTodo, GetTodos, GetTodoByID, UpdateTodo, DeleteTodo).
-
-- **`internal/handler/category.go`**
-  - **CategoryHandler:** CRUD operations for categories (CreateCategory, GetCategories, UpdateCategory, DeleteCategory).
-
-- **`internal/handler/comment.go`**
-  - **CommentHandler:** CRUD operations for comments (AddComment, GetCommentsByTodoID, UpdateComment, DeleteComment).
+**Handler Implementations**:
+- `health.go` - Health check with DB/Redis pings
+- `openapi.go` - Serves OpenAPI UI
+- `todo.go` - Todo CRUD operations
+- `category.go` - Category CRUD operations
+- `comment.go` - Comment CRUD operations
 
 ### Domain Models
 
-**Todo** (`internal/model/todo/todo.go`)
+**Todo** (`internal/model/todo/todo.go`):
 
-```go path=null start=null
+```go
 type Todo struct {
-    ID           uuid.UUID
-    UserID       string
-    Title        string
-    Description  *string
-    Status       Status    // draft, active, completed, archived
-    Priority     Priority  // low, medium, high
-    DueDate      *time.Time
-    CompletedAt  *time.Time
-    ParentTodoID *uuid.UUID  // For subtasks
-    CategoryID   *uuid.UUID
-    Metadata     *Metadata   // tags, reminder, color, difficulty
-    SortOrder    int
-    CreatedAt    time.Time
-    UpdatedAt    time.Time
+    model.Base
+    UserID       string     `json:"userId" db:"user_id"`
+    Title        string     `json:"title" db:"title"`
+    Description  *string    `json:"description" db:"description"`
+    Status       Status     `json:"status" db:"status"`         // draft, active, completed, archived
+    Priority     Priority   `json:"priority" db:"priority"`     // low, medium, high
+    DueDate      *time.Time `json:"dueDate" db:"due_date"`
+    CompletedAt  *time.Time `json:"completedAt" db:"completed_at"`
+    ParentTodoID *uuid.UUID `json:"parentTodoId" db:"parent_todo_id"`
+    CategoryID   *uuid.UUID `json:"categoryId" db:"category_id"`
+    Metadata     *Metadata  `json:"metadata" db:"metadata"`
+    SortOrder    int        `json:"sortOrder" db:"sort_order"`
+}
+
+type Metadata struct {
+    Tags       []string `json:"tags"`
+    Reminder   *string  `json:"reminder"`
+    Color      *string  `json:"color"`
+    Difficulty *int     `json:"difficulty"`
+}
+
+// Status values
+const (
+    StatusDraft     Status = "draft"
+    StatusActive    Status = "active"
+    StatusCompleted Status = "completed"
+    StatusArchived  Status = "archived"
+)
+
+// Priority values
+const (
+    PriorityLow    Priority = "low"
+    PriorityMedium Priority = "medium"
+    PriorityHigh   Priority = "high"
+)
+
+// PopulatedTodo includes related data
+type PopulatedTodo struct {
+    Todo
+    Category    *category.Category  `json:"category"`
+    Children    []Todo              `json:"children"`
+    Comments    []comment.Comment   `json:"comments"`
+    Attachments []TodoAttachment    `json:"attachments"`
 }
 ```
 
-**Category** (`internal/model/category/category.go`)
+**Category** (`internal/model/category/category.go`):
 
-```go path=null start=null
+```go
 type Category struct {
-    ID          uuid.UUID
-    UserID      string
-    Name        string
-    Color       string
-    Description *string
-    CreatedAt   time.Time
-    UpdatedAt   time.Time
+    model.Base
+    UserID      string  `json:"userId" db:"user_id"`
+    Name        string  `json:"name" db:"name"`
+    Color       string  `json:"color" db:"color"`
+    Description *string `json:"description" db:"description"`
 }
 ```
 
-**Comment** (`internal/model/comment/comment.go`)
+**Comment** (`internal/model/comment/comment.go`):
 
-```go path=null start=null
+```go
 type Comment struct {
-    ID        uuid.UUID
-    TodoID    uuid.UUID
-    UserID    string
-    Content   string
-    CreatedAt time.Time
-    UpdatedAt time.Time
+    model.Base
+    TodoID  uuid.UUID `json:"todoId" db:"todo_id"`
+    UserID  string    `json:"userId" db:"user_id"`
+    Content string    `json:"content" db:"content"`
 }
 ```
 
-### Errors
+**Base Model** (`internal/model/base.go`):
 
-- **`internal/errs/type.go`**
+```go
+type Base struct {
+    ID        uuid.UUID `json:"id" db:"id"`
+    CreatedAt time.Time `json:"createdAt" db:"created_at"`
+    UpdatedAt time.Time `json:"updatedAt" db:"updated_at"`
+}
 
-  - **HTTPError:** Code, Message, Status, Override, Errors (field-level), Action (e.g. redirect). Implements `error` and `Is(*HTTPError)`.
+type PaginatedResponse[T any] struct {
+    Data       []T `json:"data"`
+    Page       int `json:"page"`
+    Limit      int `json:"limit"`
+    Total      int `json:"total"`
+    TotalPages int `json:"totalPages"`
+}
+```
 
-- **`internal/errs/http.go`**
+### Services and Repositories
 
-  - Constructors: **NewUnauthorizedError**, **NewForbiddenError**, **NewBadRequestError**, **NewNotFoundError**, **NewInternalServerError**, **ValidationError**. **MakeUpperCaseWithUnderscores** for code formatting.
+**Services** (`internal/service/`):
 
-- **`internal/sqlerr/error.go`**
-
-  - **Code** constants: Other, NotNullViolation, ForeignKeyViolation, UniqueViolation, CheckViolation, etc., with **MapCode** from PostgreSQL codes (23502, 23503, 23505, …).
-  - **Severity** and **Error** struct (Code, Severity, Message, TableName, ColumnName, ConstraintName, …). **ConvertPgError** from pgconn.PgError.
-
-- **`internal/sqlerr/handler.go`**
-  - **HandleError(err):** If already HTTPError, return as-is. If pgconn.PgError, convert and map to user-facing message and **errs** (BadRequest with optional field errors for not_null, NotFound for no rows, InternalServerError for rest). **ErrNoRows** / **sql.ErrNoRows** → NotFound. Otherwise InternalServerError.
-  - Global error handler (in global.go) calls **sqlerr.HandleError** for non-HTTP errors before formatting response.
-
-### Logging & Observability
-
-- **`internal/logger/logger.go`**
-
-  - **LoggerService:** Holds optional New Relic Application. **NewLoggerService** from ObservabilityConfig (app name, license, log forwarding, distributed tracing, optional debug logger). **Shutdown** flushes New Relic.
-  - **NewLoggerWithService:** Builds zerolog with level from config, time format, pkgerrors stack marshaler; in production with JSON format and NR app, wraps writer with **zerologWriter** for log forwarding; otherwise console writer in dev. Logger has service, environment; in non-production adds Stack().
-  - **WithTraceContext:** Adds trace.id and span.id from New Relic transaction to logger.
-  - **NewPgxLogger,** **GetPgxTraceLogLevel:** Used for local DB query logging when env is local.
-
-- New Relic integrations used: main agent, nrecho-v4, nrpgx5, nrredis-v9, nrpkgerrors, logcontext-v2/zerologWriter.
-
-### Services & Repositories
+- `auth.go` - Clerk authentication service
+- `todo.go` - Todo business logic (create, update, delete, query, filtering)
+- `category.go` - Category business logic
+- `comment.go` - Comment business logic
+- `services.go` - Service container
 
 **Repositories** (`internal/repository/`):
-- **TodoRepository**: Todo database operations (CRUD, filtering, pagination, batch operations)
-- **CategoryRepository**: Category database operations
-- **CommentRepository**: Comment database operations
 
-**Services** (`internal/service/services.go`):
-- **AuthService**: Clerk integration for authentication
-- **TodoService**: Todo business logic (create, update, delete, query with filters)
-- **CategoryService**: Category business logic
-- **CommentService**: Comment business logic
-- **JobService**: Asynq job enqueuing (via server reference)
+- `todo.go` - Todo database operations (CRUD, filtering, pagination, batch)
+- `category.go` - Category database operations
+- `comment.go` - Comment database operations
 
-### Background Jobs
+### Error Handling
 
-**`internal/lib/jobs/`** - Asynq-based background job processing
+**HTTP Errors** (`internal/errs/`):
 
-- **JobService**: Asynq client + server with priority queues:
-  - `critical`: weight 6
-  - `default`: weight 3  
-  - `low`: weight 1
+```go
+type HTTPError struct {
+    Code     int               `json:"code"`
+    Message  string            `json:"message"`
+    Status   int               `json:"status"`
+    Override bool              `json:"override"`
+    Errors   map[string]string `json:"errors,omitempty"`
+    Action   string            `json:"action,omitempty"`
+}
+```
 
-- **Task Types**:
-  - `email:welcome`: Welcome email on signup
-  - `email:reminder`: Due date reminder emails
-  - `email:weekly_report`: Weekly productivity reports
+**Error Constructors** (`internal/errs/http.go`):
+- `NewUnauthorizedError`
+- `NewForbiddenError`
+- `NewBadRequestError`
+- `NewNotFoundError`
+- `NewInternalServerError`
+- `ValidationError`
 
-- **Configuration**: MaxRetry(3), Queue("default"), Timeout(30s)
+**PostgreSQL Error Handling** (`internal/sqlerr/`):
+
+Maps PostgreSQL error codes to HTTP errors:
+- `UniqueViolation` → 409 Conflict
+- `NotNullViolation` → 400 Bad Request
+- `ForeignKeyViolation` → 400 Bad Request
+- `CheckViolation` → 400 Bad Request
+
+### Logging and Observability
+
+**Logger Service** (`internal/logger/logger.go`):
+
+- Uses zerolog for structured logging
+- Optional New Relic integration for log forwarding
+- Different log formats for development (console) vs production (JSON)
+- Request-scoped logging with trace context
+
+**New Relic Integration**:
+- APM (Application Performance Monitoring)
+- Distributed tracing
+- Custom events:
+  - `HealthCheckError` - Health check failures
+  - `RateLimitHit` - Rate limit exceeded
+- Database query tracing (nrpgx5)
+- Redis command tracing (nrredis-v9)
+- HTTP handler tracing (nrecho-v4)
+
+### Background Jobs (Asynq)
+
+**Job Service** (`internal/lib/jobs/`):
+
+The application uses Asynq for background job processing with priority queues:
+
+```go
+// Queue configuration
+const (
+    CriticalQueue = "critical"  // Weight: 6
+    DefaultQueue = "default"    // Weight: 3
+    LowQueue     = "low"        // Weight: 1
+)
+```
+
+**Task Types**:
+- `email:welcome` - Welcome email on user signup
+- `email:reminder` - Due date reminder emails
+- `email:weekly_report` - Weekly productivity reports
+
+**Job Configuration**:
+- MaxRetry: 3
+- Queue: default
+- Timeout: 30s
 
 ### Cron Jobs
 
-**`cmd/cron/main.go`** - CLI runner using Cobra
+**Cron Job Runner** (`cmd/cron/main.go`):
 
-```bash path=null start=null
+Cobra-based CLI for running scheduled jobs:
+
+```bash
 # List available jobs
 go run ./cmd/cron list
 
-# Run a specific job
+# Run specific jobs
 go run ./cmd/cron due-date-reminders
 go run ./cmd/cron weekly-reports
+go run ./cmd/cron overdue-notifications
+go run ./cmd/cron auto-archive
 ```
 
-**`internal/cron/`** - Job definitions:
+**Cron Job Definitions** (`internal/cron/`):
 
 | Job | Command | Description |
 |-----|---------|-------------|
-| `DueDateRemindersJob` | `due-date-reminders` | Enqueue reminders for todos due within N hours |
-| `OverdueNotificationsJob` | `overdue-notifications` | Enqueue notifications for overdue todos |
-| `WeeklyReportsJob` | `weekly-reports` | Generate and enqueue weekly productivity reports |
-| `AutoArchiveJob` | `auto-archive` | Archive completed todos older than N days |
+| DueDateRemindersJob | due-date-reminders | Enqueue reminders for todos due within N hours |
+| OverdueNotificationsJob | overdue-notifications | Enqueue notifications for overdue todos |
+| WeeklyReportsJob | weekly-reports | Generate and enqueue weekly productivity reports |
+| AutoArchiveJob | auto-archive | Archive completed todos older than N days |
 
-**Scheduling** (example crontab):
+**Example Crontab**:
 
-```bash path=null start=null
+```bash
 # Daily at 8 AM - due date reminders
 0 8 * * * cd /path/to/backend && go run ./cmd/cron due-date-reminders
 
-# Every 4 hours - overdue notifications  
+# Every 4 hours - overdue notifications
 0 */4 * * * cd /path/to/backend && go run ./cmd/cron overdue-notifications
 
 # Weekly on Monday at 9 AM - productivity reports
@@ -366,51 +631,78 @@ go run ./cmd/cron weekly-reports
 0 2 * * * cd /path/to/backend && go run ./cmd/cron auto-archive
 ```
 
-### Email
+### Email System
 
-- **`internal/lib/email/client.go`**
+**Email Client** (`internal/lib/email/`):
 
-  - **Client** wraps Resend client. **SendEmail(to, subject, templateName, data):** Loads HTML from `templates/emails/{templateName}.html`, executes with data, sends via Resend (from: TaskManager &lt;onboarding@resend.dev&gt;).
+- Uses Resend for email delivery
+- HTML template support with Go templates
 
-- **`internal/lib/email/emails.go`**
+**Email Templates** (`templates/emails/`):
+- `welcome.html` - Welcome email template
 
-  - **SendWelcomeEmail(to, firstName):** Uses TemplateWelcome and data UserFirstName.
-
-- **`internal/lib/email/template.go`**
-
-  - **Template** type; **TemplateWelcome** = `"welcome"`.
-
-- **`internal/lib/email/preview.go`**
-
-  - **PreviewData** map for template preview (e.g. welcome → UserFirstName: "John").
-
-- **`templates/emails/welcome.html`**
-  - Go HTML template with `{{.UserFirstName}}`, “Welcome to TaskManager!”, CTA, support link.
+**Email Functions**:
+- `SendWelcomeEmail(to, firstName)` - Send welcome email
 
 ### Validation
 
-- **`internal/validation/utils.go`**
-  - **Validatable** interface: `Validate() error`.
-  - **BindAndValidate(c, payload):** Binds payload with `c.Bind(payload)`, then validates with `validateStruct(payload)`. On bind error returns BadRequest with message; on validation error returns BadRequest with **extractValidationErrors** (field + message per tag).
-  - **extractValidationErrors:** Handles **validator.ValidationErrors** (required, min, max, oneof, email, e164, uuid, uuidList, dive) and custom **CustomValidationErrors**.
-  - **IsValidUUID:** regex for UUID string.
+**Validation** (`internal/validation/utils.go`):
+
+Uses go-playground/validator for request validation:
+
+```go
+// BindAndValidate - Bind request and validate
+func BindAndValidate(c echo.Context, payload any) error
+
+// Validatable interface for custom validation
+type Validatable interface {
+    Validate() error
+}
+```
+
+**Supported Validations**:
+- Required fields
+- Min/Max length
+- OneOf enums
+- Email format
+- UUID format
+- Custom validation errors
 
 ---
 
-## Packages (TypeScript)
+## TypeScript Packages
 
-- **`packages/zod`**
+### Zod Schemas
 
-  - Shared Zod schemas; **@anatine/zod-openapi** for OpenAPI metadata. Exports e.g. **ZHealthResponse** (status, timestamp, environment, checks.database, checks.redis).
+**Location**: `packages/zod`
 
-- **`packages/openapi`**
+Shared Zod schemas for request/response validation:
 
-  - **ts-rest** contract: health contract (GET /status, response ZHealthResponse). **apiContract** aggregates contracts.
-  - **generateOpenApi** with security (bearerAuth, x-service-token), operationMapper for security metadata. **gen.ts** string-replaces custom “file” type with OpenAPI binary, then writes **openapi.json** to repo and (in script) to `../../apps/backend/static/openapi.json` For this repo, add or change the output path in `packages/openapi/src/gen.ts` to `../../backend/static/openapi.json` so `/docs` loads the generated spec.
-  - Backend serves `/docs` with Scalar and `/static/openapi.json` so docs stay in sync when you run the openapi package gen.
+- `ZHealthResponse` - Health check response schema
+- TypeScript types matching Go models
 
-- **`packages/emails`**
-  - Optional React-based email templates (e.g. welcome.tsx); can be used to generate or mirror HTML for backend.
+Uses `@anatine/zod-openapi` for OpenAPI metadata.
+
+### OpenAPI Contracts
+
+**Location**: `packages/openapi`
+
+- **ts-rest** contracts for type-safe API definitions
+- **Contracts**:
+  - Health contract (`health.ts`)
+  - Todo contract (`todo.ts`)
+  - Category contract (`category.ts`)
+  - Comment contract (`comment.ts`)
+- **OpenAPI Generation**: Generates `openapi.json` for API documentation
+- **Scalar UI**: Interactive API documentation at `/docs`
+
+### Email Templates
+
+**Location**: `packages/emails`
+
+React-based email templates (optional):
+- Can be used to generate HTML for backend templates
+- Type-safe email component library
 
 ---
 
@@ -418,76 +710,63 @@ go run ./cmd/cron weekly-reports
 
 ### System Routes
 
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/status` | Health check (DB, Redis status) |
-| GET | `/docs` | OpenAPI documentation (Scalar UI) |
-| GET | `/static/*` | Static files (openapi.json) |
+| Method | Path | Description | Auth |
+|--------|------|-------------|------|
+| GET | `/status` | Health check | No |
+| GET | `/docs` | OpenAPI documentation | No |
+| GET | `/static/*` | Static files | No |
 
-### Todo Routes (Protected)
+### Todo API
 
-| Method | Path | Description |
-|--------|------|-------------|
-| POST | `/api/v1/todos` | Create a new todo |
-| GET | `/api/v1/todos` | List todos (paginated, filterable) |
-| GET | `/api/v1/todos/:id` | Get todo by ID (with category, children, comments) |
-| PUT | `/api/v1/todos/:id` | Update a todo |
-| DELETE | `/api/v1/todos/:id` | Delete a todo |
+| Method | Path | Description | Auth |
+|--------|------|-------------|------|
+| POST | `/api/v1/todos` | Create a new todo | Required |
+| GET | `/api/v1/todos` | List todos (paginated, filterable) | Required |
+| GET | `/api/v1/todos/:id` | Get todo by ID | Required |
+| PUT | `/api/v1/todos/:id` | Update a todo | Required |
+| DELETE | `/api/v1/todos/:id` | Delete a todo | Required |
 
 **Query Parameters for GET /todos**:
-- `page`, `limit`: Pagination (default: page=1, limit=20)
-- `sort`: `created_at`, `updated_at`, `title`, `priority`, `due_date`, `status`
-- `order`: `asc`, `desc`
-- `search`: Full-text search
-- `status`: `draft`, `active`, `completed`, `archived`
-- `priority`: `low`, `medium`, `high`
-- `categoryId`, `parentTodoId`: Filter by relations
-- `dueFrom`, `dueTo`: Date range
-- `overdue`, `completed`: Boolean filters
+- `page` - Page number (default: 1)
+- `limit` - Items per page (default: 20)
+- `sort` - Sort field: `created_at`, `updated_at`, `title`, `priority`, `due_date`, `status`
+- `order` - Sort order: `asc`, `desc`
+- `search` - Full-text search
+- `status` - Filter by status: `draft`, `active`, `completed`, `archived`
+- `priority` - Filter by priority: `low`, `medium`, `high`
+- `categoryId` - Filter by category UUID
+- `parentTodoId` - Filter by parent todo UUID
+- `dueFrom` - Due date range start
+- `dueTo` - Due date range end
+- `overdue` - Boolean filter for overdue tasks
+- `completed` - Boolean filter for completed tasks
 
-### Category Routes (Protected)
+### Category API
 
-| Method | Path | Description |
-|--------|------|-------------|
-| POST | `/api/v1/categories` | Create a category |
-| GET | `/api/v1/categories` | List categories |
-| PUT | `/api/v1/categories/:id` | Update a category |
-| DELETE | `/api/v1/categories/:id` | Delete a category |
+| Method | Path | Description | Auth |
+|--------|------|-------------|------|
+| POST | `/api/v1/categories` | Create a category | Required |
+| GET | `/api/v1/categories` | List categories | Required |
+| GET | `/api/v1/categories/:id` | Get category by ID | Required |
+| PUT | `/api/v1/categories/:id` | Update a category | Required |
+| DELETE | `/api/v1/categories/:id` | Delete a category | Required |
 
-### Comment Routes (Protected)
+### Comment API
 
-| Method | Path | Description |
-|--------|------|-------------|
-| POST | `/api/v1/todos/:todoId/comments` | Add comment to todo |
-| GET | `/api/v1/todos/:todoId/comments` | Get comments for todo |
-| PUT | `/api/v1/comments/:id` | Update a comment |
-| DELETE | `/api/v1/comments/:id` | Delete a comment |
-
----
-
-## Tooling
-
-- **Taskfile (backend/Taskfile.yml)**
-
-  - **run:** `go run ./cmd/go-taskmanager`
-  - **migrations:new:** `tern new -m ./internal/database/migrations {{.NAME}}` (requires `name=...`)
-  - **migrations:up:** `tern migrate -m ./internal/database/migrations --conn-string {{.TASKMANAGER_DB_DSN}}` (with confirm)
-  - **tidy:** `go fmt ./...`, `go mod tidy`, `go mod verify`
-
-- **Golangci-lint (backend/.golangci.yml)**
-
-  - Large set of linters (errcheck, staticcheck, gosec, revive, gocritic, etc.) with sensible limits (e.g. cyclop, funlen, gocognit). **gomodguard** blocks old uuid/protobuf modules. **exhaustruct** exclusions for std and third-party structs. **govet** with shadow strict.
-
-- **Root**
-  - **package.json** + **turbo.json**: Workspaces `apps/*`, `packages/*`; scripts: build, dev, format, lint, typecheck, clean. Turbo runs tasks with dependency order (^build, etc.).
+| Method | Path | Description | Auth |
+|--------|------|-------------|------|
+| POST | `/api/v1/todos/:todoId/comments` | Add comment to todo | Required |
+| GET | `/api/v1/todos/:todoId/comments` | Get comments for todo | Required |
+| PUT | `/api/v1/comments/:id` | Update a comment | Required |
+| DELETE | `/api/v1/comments/:id` | Delete a comment | Required |
 
 ---
 
 ## Environment Variables
 
-All backend config is read from environment with prefix **TASKMANAGER\_**. Keys are lowercased and the prefix is stripped (e.g. `TASKMANAGER_SERVER_PORT` → `server.port`). Nested keys use underscore (e.g. `TASKMANAGER_DATABASE_HOST`).
+All configuration is managed through environment variables with the `TASKMANAGER_` prefix.
 
-Example (replace values as needed):
+### Required Variables
 
 ```bash
 # Primary
@@ -517,11 +796,15 @@ TASKMANAGER_AUTH_SECRET_KEY=sk_test_...
 
 # Redis
 TASKMANAGER_REDIS_ADDRESS=localhost:6379
+```
 
-# Integration (Resend)
+### Optional Variables
+
+```bash
+# Resend Email Integration
 TASKMANAGER_INTEGRATION_RESEND_API_KEY=re_...
 
-# Observability (optional)
+# Observability (New Relic)
 TASKMANAGER_OBSERVABILITY_SERVICE_NAME=taskmanager
 TASKMANAGER_OBSERVABILITY_ENVIRONMENT=development
 TASKMANAGER_OBSERVABILITY_LOGGING_LEVEL=debug
@@ -536,29 +819,181 @@ TASKMANAGER_OBSERVABILITY_HEALTH_CHECKS_TIMEOUT=5s
 TASKMANAGER_OBSERVABILITY_HEALTH_CHECKS_CHECKS=database,redis
 ```
 
-For **Taskfile** migrations: set **TASKMANAGER_DB_DSN** (e.g. `postgres://user:pass@localhost:5432/taskmanager?sslmode=disable`).
+---
+
+## Getting Started
+
+### Prerequisites
+
+- **Go**: 1.25 or higher
+- **PostgreSQL**: Latest stable version
+- **Redis**: Latest stable version
+- **Node.js**: 22 or higher (for TypeScript packages)
+- **Bun**: 1.2 or higher
+- **Task** (optional): For Taskfile automation
+
+### Installation
+
+1. **Clone the repository**:
+   ```bash
+   git clone <repository-url>
+   cd TaskManagement
+   ```
+
+2. **Install dependencies**:
+   ```bash
+   # Install Go dependencies
+   cd backend
+   go mod download
+
+   # Install Node dependencies (from root)
+   bun install
+   ```
+
+3. **Configure environment**:
+   ```bash
+   # Copy the example environment file
+   cp backend/.env.example backend/.env
+
+   # Edit backend/.env with your configuration
+   ```
+
+4. **Set up the database**:
+   ```bash
+   # Create PostgreSQL database
+   createdb taskmanager
+
+   # Run migrations (non-local environments)
+   cd backend
+   task migrations:up
+   ```
+
+### Running the Application
+
+**Development Mode**:
+
+```bash
+# Run the backend server
+cd backend
+task run
+
+# Or directly
+go run ./cmd/taskmanager
+```
+
+**Run Cron Jobs**:
+
+```bash
+# List available cron jobs
+go run ./cmd/cron list
+
+# Run a specific job
+go run ./cmd/cron due-date-reminders
+go run ./cmd/cron weekly-reports
+```
+
+**Generate OpenAPI Documentation**:
+
+```bash
+# From packages/openapi
+cd packages/openapi
+bun run gen
+```
+
+**Access the API**:
+- API: http://localhost:8080
+- Health: http://localhost:8080/status
+- Docs: http://localhost:8080/docs
 
 ---
 
-## Running the Project
+## Development Tools
 
-1. **Prerequisites:** Go 1.25+, PostgreSQL, Redis, Node/Bun for packages.
-2. **Env:** Copy or set the variables above (e.g. `.env` and use `godotenv/autoload` or export).
-3. **Backend:**
-   - From repo root: `cd backend && task run` (or `go run ./cmd/go-taskmanager`).
-   - Migrations (non-local): run automatically on startup; for manual run: `TASKMANAGER_DB_DSN=... task migrations:up`.
-   - New migration: `task migrations:new name=add_users_table`.
-4. **OpenAPI:** From repo root, build/openapi gen so `backend/static/openapi.json` exists (e.g. `cd packages/zod && bun run build && cd ../openapi && bun run gen` if gen writes there). Then open `http://localhost:8080/docs`.
-5. **Health:** `GET http://localhost:8080/status`.
+### Taskfile (backend/Taskfile.yml)
+
+```bash
+# Run the server
+task run
+
+# Create new migration
+task migrations:new name=add_users_table
+
+# Run migrations
+task migrations:up
+
+# Format and tidy Go code
+task tidy
+```
+
+### Golangci-lint
+
+The project uses golangci-lint with extensive linters:
+- errcheck, staticcheck, gosec, revive, gocritic
+- Cyclomatic complexity limits
+- Function length limits
+- Custom module restrictions
+
+Run linting:
+```bash
+golangci-lint run
+```
+
+### Turborepo
+
+From the root directory:
+
+```bash
+# Build all packages
+bun run build
+
+# Run dev mode
+bun run dev
+
+# Type check all packages
+bun run typecheck
+
+# Lint all packages
+bun run lint
+
+# Format code
+bun run format:fix
+```
 
 ---
 
-## Extending the TaskManager
+## Extending the Application
 
-- **New route:** Add to `router/system.go` or a versioned group in `router/router.go`; use `middlewares.Auth.RequireAuth(next)` for protected routes.
-- **New handler:** Implement handler func with request/response types implementing **Validatable** where needed; register with **Handle**, **HandleNoContent**, or **HandleFile** from `handler/base.go`.
-- **New migration:** `task migrations:new name=your_change` in `backend`, then edit the new file under `internal/database/migrations/`.
-- **New job:** Define task type and payload in `internal/lib/jobs`, add handler in `job.go` (mux.HandleFunc), enqueue via `Job.Client.Enqueue(...)` from services/handlers.
-- **New email template:** Add template name in `internal/lib/email/template.go`, HTML in `templates/emails/`, and send method in `internal/lib/email/`.
-- **OpenAPI:** Add contract in `packages/openapi/src/contracts/`, add Zod types in `packages/zod`, run openapi package gen and copy/openapi.json to `backend/static/` if needed.
-- **Config:** Add fields to `config.Config` or `ObservabilityConfig` and corresponding env vars with `TASKMANAGER_` prefix.
+### Adding a New Route
+
+1. Create a new handler in `internal/handler/`
+2. Register the route in `internal/router/v1/`
+3. Add service methods in `internal/service/`
+4. Add repository methods in `internal/repository/`
+
+### Adding a New Model
+
+1. Create model in `internal/model/`
+2. Create repository in `internal/repository/`
+3. Create service in `internal/service/`
+4. Create handler in `internal/handler/`
+5. Add Zod schema in `packages/zod/`
+6. Add ts-rest contract in `packages/openapi/`
+7. Generate OpenAPI spec
+
+### Adding a Background Job
+
+1. Define task type in `internal/lib/jobs/`
+2. Add handler in job server (`internal/lib/jobs/job.go`)
+3. Enqueue from service using `Job.Client.Enqueue()`
+
+### Adding an Email Template
+
+1. Add template name in `internal/lib/email/template.go`
+2. Create HTML template in `templates/emails/`
+3. Add send function in `internal/lib/email/`
+
+---
+
+## License
+
+MIT License - See LICENSE file for details
