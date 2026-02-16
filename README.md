@@ -1,12 +1,14 @@
-# Go TaskManager
+# TaskManager
 
-A production-ready Go backend taskmanager with Echo, PostgreSQL, Redis, background jobs, observability (New Relic), Clerk auth, typed handlers, OpenAPI docs, and shared TypeScript packages for API contracts and Zod schemas.
+A production-ready task management application with a Go backend API, PostgreSQL, Redis, background jobs (Asynq), cron jobs, observability (New Relic), Clerk authentication, and shared TypeScript packages for API contracts and Zod schemas.
 
 ---
 
 ## Table of Contents
 
 - [Overview](#overview)
+- [Features](#features)
+- [Tech Stack](#tech-stack)
 - [Project Structure](#project-structure)
 - [Backend](#backend)
   - [Entry Point & Startup](#entry-point--startup)
@@ -15,13 +17,16 @@ A production-ready Go backend taskmanager with Echo, PostgreSQL, Redis, backgrou
   - [Database](#database)
   - [Router & Middleware](#router--middleware)
   - [Handlers](#handlers)
+  - [Domain Models](#domain-models)
+  - [Services & Repositories](#services--repositories)
   - [Errors](#errors)
   - [Logging & Observability](#logging--observability)
-  - [Services & Repositories](#services--repositories)
   - [Background Jobs](#background-jobs)
+  - [Cron Jobs](#cron-jobs)
   - [Email](#email)
   - [Validation](#validation)
 - [Packages (TypeScript)](#packages-typescript)
+- [API Endpoints](#api-endpoints)
 - [Tooling](#tooling)
 - [Environment Variables](#environment-variables)
 - [Running the Project](#running-the-project)
@@ -31,22 +36,47 @@ A production-ready Go backend taskmanager with Echo, PostgreSQL, Redis, backgrou
 
 ## Overview
 
-- **API framework:** [Echo v4](https://echo.labstack.com/)
-- **Database:** PostgreSQL via [pgx v5](https://github.com/jackc/pgx), [tern](https://github.com/jackc/tern) migrations
-- **Cache/queue:** Redis ([go-redis](https://github.com/redis/go-redis)), [Asynq](https://github.com/hibiken/asynq) for background jobs
-- **Auth:** [Clerk](https://clerk.com/) via `clerk-sdk-go` (JWT/session validation, user/role/permissions in context)
-- **Config:** [Koanf](https://github.com/knadh/koanf) from env with `TASKMANAGER_` prefix, [go-playground/validator](https://github.com/go-playground/validator)
-- **Logging:** [zerolog](https://github.com/rs/zerolog) with request-scoped loggers and optional New Relic log forwarding
-- **Observability:** New Relic (APM, distributed tracing, log context, nrpgx5, nrecho, nrredis, zerolog writer)
-- **API docs:** OpenAPI 3 generated from [ts-rest](https://ts-rest.com/) contracts in `packages/openapi`, served at `/docs` with Scalar
-- **Shared types:** Zod schemas and OpenAPI generation in `packages/zod` and `packages/openapi`
+TaskManager is a full-featured task management system designed for production use. It provides a REST API for managing todos, categories, and comments with features like hierarchical todos, due date reminders, overdue notifications, weekly productivity reports, and automatic archiving.
+
+---
+
+## Features
+
+- **Todo Management**: Create, update, delete, and organize todos with priorities, statuses, due dates, and metadata
+- **Hierarchical Todos**: Support for parent-child todo relationships (subtasks)
+- **Categories**: Organize todos into color-coded categories
+- **Comments**: Add comments to todos for collaboration
+- **Attachments**: Upload and manage file attachments on todos
+- **Pagination & Filtering**: Advanced query support with sorting, filtering, and search
+- **Background Jobs**: Async email processing via Asynq (Redis-backed)
+- **Cron Jobs**: Scheduled tasks for reminders, notifications, reports, and auto-archiving
+- **Authentication**: Clerk-based JWT authentication with user roles and permissions
+- **Observability**: Full New Relic APM integration with distributed tracing and log forwarding
+- **API Documentation**: OpenAPI 3.0 spec with Scalar UI
+
+---
+
+## Tech Stack
+
+| Component | Technology |
+|-----------|------------|
+| **API Framework** | [Echo v4](https://echo.labstack.com/) |
+| **Database** | PostgreSQL via [pgx v5](https://github.com/jackc/pgx), [tern](https://github.com/jackc/tern) migrations |
+| **Cache/Queue** | Redis ([go-redis](https://github.com/redis/go-redis)), [Asynq](https://github.com/hibiken/asynq) for background jobs |
+| **Authentication** | [Clerk](https://clerk.com/) via `clerk-sdk-go` |
+| **Configuration** | [Koanf](https://github.com/knadh/koanf) with env vars, [go-playground/validator](https://github.com/go-playground/validator) |
+| **Logging** | [zerolog](https://github.com/rs/zerolog) with New Relic log forwarding |
+| **Observability** | New Relic (APM, distributed tracing, nrpgx5, nrecho, nrredis) |
+| **API Docs** | OpenAPI 3 via [ts-rest](https://ts-rest.com/), served with Scalar |
+| **CLI** | [Cobra](https://github.com/spf13/cobra) for cron job runner |
+| **Monorepo** | [Turborepo](https://turbo.build/), Bun package manager |
 
 ---
 
 ## Project Structure
 
 ```
-go-taskmanager/
+TaskManagement/
 ├── backend/                    # Go API server
 │   ├── cmd/go-taskmanager/     # main entry
 │   ├── internal/
@@ -179,6 +209,65 @@ go-taskmanager/
 - **`internal/handler/openapi.go`**
   - **ServeOpenAPIUI:** Serves `static/openapi.html` as HTML (Cache-Control: no-cache). The HTML page loads Scalar with `/static/openapi.json`.
 
+- **`internal/handler/todo.go`**
+  - **TodoHandler:** CRUD operations for todos (CreateTodo, GetTodos, GetTodoByID, UpdateTodo, DeleteTodo).
+
+- **`internal/handler/category.go`**
+  - **CategoryHandler:** CRUD operations for categories (CreateCategory, GetCategories, UpdateCategory, DeleteCategory).
+
+- **`internal/handler/comment.go`**
+  - **CommentHandler:** CRUD operations for comments (AddComment, GetCommentsByTodoID, UpdateComment, DeleteComment).
+
+### Domain Models
+
+**Todo** (`internal/model/todo/todo.go`)
+
+```go path=null start=null
+type Todo struct {
+    ID           uuid.UUID
+    UserID       string
+    Title        string
+    Description  *string
+    Status       Status    // draft, active, completed, archived
+    Priority     Priority  // low, medium, high
+    DueDate      *time.Time
+    CompletedAt  *time.Time
+    ParentTodoID *uuid.UUID  // For subtasks
+    CategoryID   *uuid.UUID
+    Metadata     *Metadata   // tags, reminder, color, difficulty
+    SortOrder    int
+    CreatedAt    time.Time
+    UpdatedAt    time.Time
+}
+```
+
+**Category** (`internal/model/category/category.go`)
+
+```go path=null start=null
+type Category struct {
+    ID          uuid.UUID
+    UserID      string
+    Name        string
+    Color       string
+    Description *string
+    CreatedAt   time.Time
+    UpdatedAt   time.Time
+}
+```
+
+**Comment** (`internal/model/comment/comment.go`)
+
+```go path=null start=null
+type Comment struct {
+    ID        uuid.UUID
+    TodoID    uuid.UUID
+    UserID    string
+    Content   string
+    CreatedAt time.Time
+    UpdatedAt time.Time
+}
+```
+
 ### Errors
 
 - **`internal/errs/type.go`**
@@ -211,29 +300,71 @@ go-taskmanager/
 
 ### Services & Repositories
 
-- **`internal/repository/repositories.go`**
+**Repositories** (`internal/repository/`):
+- **TodoRepository**: Todo database operations (CRUD, filtering, pagination, batch operations)
+- **CategoryRepository**: Category database operations
+- **CommentRepository**: Comment database operations
 
-  - **Repositories** is an empty struct; **NewRepositories(server)** returns it. Ready for DB-backed repositories.
-
-- **`internal/service/services.go`**
-
-  - **Services** has Auth and Job. **NewServices(server, repos)** builds AuthService (sets Clerk key from config) and attaches server’s Job service.
-
-- **`internal/service/auth.go`**
-  - **AuthService** only sets **Clerk** secret key from config; actual auth is in middleware via Clerk SDK.
+**Services** (`internal/service/services.go`):
+- **AuthService**: Clerk integration for authentication
+- **TodoService**: Todo business logic (create, update, delete, query with filters)
+- **CategoryService**: Category business logic
+- **CommentService**: Comment business logic
+- **JobService**: Asynq job enqueuing (via server reference)
 
 ### Background Jobs
 
-- **`internal/lib/jobs/job.go`**
+**`internal/lib/jobs/`** - Asynq-based background job processing
 
-  - **JobService:** Asynq client + server (Redis addr from config). Queues: critical (6), default (3), low (1). **Start:** Registers **TaskWelcome** handler, starts server. **Stop:** Shutdown server, close client.
+- **JobService**: Asynq client + server with priority queues:
+  - `critical`: weight 6
+  - `default`: weight 3  
+  - `low`: weight 1
 
-- **`internal/lib/jobs/email_task.go`**
+- **Task Types**:
+  - `email:welcome`: Welcome email on signup
+  - `email:reminder`: Due date reminder emails
+  - `email:weekly_report`: Weekly productivity reports
 
-  - **TaskWelcome** = `"email:welcome"`. **WelcomeEmailPayload:** To, FirstName. **NewWelcomeEmailTask** builds asynq task with MaxRetry(3), Queue("default"), Timeout(30s).
+- **Configuration**: MaxRetry(3), Queue("default"), Timeout(30s)
 
-- **`internal/lib/jobs/handlers.go`**
-  - **InitHandlers:** Creates email client from config and logger. **handleWelcomeEmailTask:** Unmarshals payload, calls **emailClient.SendWelcomeEmail(to, firstName)**, logs success/failure.
+### Cron Jobs
+
+**`cmd/cron/main.go`** - CLI runner using Cobra
+
+```bash path=null start=null
+# List available jobs
+go run ./cmd/cron list
+
+# Run a specific job
+go run ./cmd/cron due-date-reminders
+go run ./cmd/cron weekly-reports
+```
+
+**`internal/cron/`** - Job definitions:
+
+| Job | Command | Description |
+|-----|---------|-------------|
+| `DueDateRemindersJob` | `due-date-reminders` | Enqueue reminders for todos due within N hours |
+| `OverdueNotificationsJob` | `overdue-notifications` | Enqueue notifications for overdue todos |
+| `WeeklyReportsJob` | `weekly-reports` | Generate and enqueue weekly productivity reports |
+| `AutoArchiveJob` | `auto-archive` | Archive completed todos older than N days |
+
+**Scheduling** (example crontab):
+
+```bash path=null start=null
+# Daily at 8 AM - due date reminders
+0 8 * * * cd /path/to/backend && go run ./cmd/cron due-date-reminders
+
+# Every 4 hours - overdue notifications  
+0 */4 * * * cd /path/to/backend && go run ./cmd/cron overdue-notifications
+
+# Weekly on Monday at 9 AM - productivity reports
+0 9 * * 1 cd /path/to/backend && go run ./cmd/cron weekly-reports
+
+# Daily at 2 AM - auto-archive old todos
+0 2 * * * cd /path/to/backend && go run ./cmd/cron auto-archive
+```
 
 ### Email
 
@@ -280,6 +411,57 @@ go-taskmanager/
 
 - **`packages/emails`**
   - Optional React-based email templates (e.g. welcome.tsx); can be used to generate or mirror HTML for backend.
+
+---
+
+## API Endpoints
+
+### System Routes
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/status` | Health check (DB, Redis status) |
+| GET | `/docs` | OpenAPI documentation (Scalar UI) |
+| GET | `/static/*` | Static files (openapi.json) |
+
+### Todo Routes (Protected)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/api/v1/todos` | Create a new todo |
+| GET | `/api/v1/todos` | List todos (paginated, filterable) |
+| GET | `/api/v1/todos/:id` | Get todo by ID (with category, children, comments) |
+| PUT | `/api/v1/todos/:id` | Update a todo |
+| DELETE | `/api/v1/todos/:id` | Delete a todo |
+
+**Query Parameters for GET /todos**:
+- `page`, `limit`: Pagination (default: page=1, limit=20)
+- `sort`: `created_at`, `updated_at`, `title`, `priority`, `due_date`, `status`
+- `order`: `asc`, `desc`
+- `search`: Full-text search
+- `status`: `draft`, `active`, `completed`, `archived`
+- `priority`: `low`, `medium`, `high`
+- `categoryId`, `parentTodoId`: Filter by relations
+- `dueFrom`, `dueTo`: Date range
+- `overdue`, `completed`: Boolean filters
+
+### Category Routes (Protected)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/api/v1/categories` | Create a category |
+| GET | `/api/v1/categories` | List categories |
+| PUT | `/api/v1/categories/:id` | Update a category |
+| DELETE | `/api/v1/categories/:id` | Delete a category |
+
+### Comment Routes (Protected)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/api/v1/todos/:todoId/comments` | Add comment to todo |
+| GET | `/api/v1/todos/:todoId/comments` | Get comments for todo |
+| PUT | `/api/v1/comments/:id` | Update a comment |
+| DELETE | `/api/v1/comments/:id` | Delete a comment |
 
 ---
 
