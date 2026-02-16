@@ -5,7 +5,7 @@ import {
   ZTodo,
   ZTodoAttachment,
   ZTodoStats,
-} from "@tasker/zod";
+} from "@taskmanager/zod";
 import { initContract } from "@ts-rest/core";
 import z from "zod";
 
